@@ -8,19 +8,19 @@ import { ImgCropService } from './img-crop.service';
 @Injectable()
 export class ImgResizeExactService {
     constructor(@Inject(forwardRef(() => Ng2ImgMaxService)) private ng2ImgMaxService: Ng2ImgMaxService,
-                @Inject(forwardRef(() => ImgCropService)) private imgCropService: ImgCropService) { }
+        @Inject(forwardRef(() => ImgCropService)) private imgCropService: ImgCropService) { }
 
-    public resizeExactFill(file: File, toWidth: number, toHeight: number, fillColor?:string): Observable<any> {
+    public resizeExactFill(file: File, toWidth: number, toHeight: number, fillColor?: string, filter?: string): Observable<any> {
         let resizedImageSubject: Subject<any> = new Subject<any>();
         if (file.type !== "image/jpeg" && file.type !== "image/png") {
-            setTimeout(()=>{
+            setTimeout(() => {
                 resizedImageSubject.error({ resizedFile: file, reason: "File provided is neither of type jpg nor of type png.", error: "INVALID_EXTENSION" });
-            },0);
+            }, 0);
             return resizedImageSubject.asObservable();
         }
         let img = new Image();
         img.onload = () => {
-            this.ng2ImgMaxService.getEXIFOrientedImage(img).then(orientedImg=>{
+            this.ng2ImgMaxService.getEXIFOrientedImage(img).then(orientedImg => {
                 window.URL.revokeObjectURL(img.src);
                 let imgRatio = orientedImg.width / orientedImg.height;
                 let resizedRatio = toWidth / toHeight;
@@ -40,55 +40,59 @@ export class ImgResizeExactService {
                 }
 
                 this.ng2ImgMaxService.resize([file], resizeWidth, resizeHeight).subscribe((resizeResult) => {
-                
-                        /* To fill the image based on the center, we calculate where the img needs to be positioned to be centered*/
-                        let startX = 0;
-                        let startY = 0;
 
-                        /* one side is already resized exactly to the desired size, now fill the other side */
-                        if (resizeWidth === 100000) {
-                            /* resized to height -> as we fill to the width, we have to set startX */
-                            let newImgWidth = orientedImg.width / (orientedImg.height / toHeight);
-                            startX = (newImgWidth - toWidth) / 2;
+                    /* To fill the image based on the center, we calculate where the img needs to be positioned to be centered*/
+                    let startX = 0;
+                    let startY = 0;
+
+                    /* one side is already resized exactly to the desired size, now fill the other side */
+                    if (resizeWidth === 100000) {
+                        /* resized to height -> as we fill to the width, we have to set startX */
+                        let newImgWidth = orientedImg.width / (orientedImg.height / toHeight);
+                        startX = (newImgWidth - toWidth) / 2;
+                    }
+                    else if (resizeHeight === 100000) {
+                        /* resized to width -> as we fill to the height, we have to set startY */
+                        let newImgHeight = orientedImg.height / (orientedImg.width / toWidth);
+                        startY = (newImgHeight - toHeight) / 2;
+                    }
+
+                    let img = new Image();
+                    let cvs = document.createElement('canvas');
+                    let ctx = cvs.getContext('2d');
+                    img.onload = () => {
+                        cvs.width = toWidth;
+                        cvs.height = toHeight;
+                        if (fillColor) {
+                            ctx.fillStyle = fillColor;
+                            ctx.fillRect(0, 0, toWidth, toHeight);
                         }
-                        else if (resizeHeight === 100000) {
-                            /* resized to width -> as we fill to the height, we have to set startY */
-                            let newImgHeight = orientedImg.height / (orientedImg.width / toWidth);
-                            startY = (newImgHeight - toHeight) / 2;
-                        }
-                        
-                        let img = new Image();
-                        let cvs = document.createElement('canvas');
-                        let ctx = cvs.getContext('2d');
-                        img.onload = () => {
-                            cvs.width=toWidth;
-                            cvs.height=toHeight;
-                            if(fillColor){
+
+                        ctx.drawImage(img, startX, startY, toWidth, toHeight, 0, 0, toWidth, toHeight);
+                        let imageData = ctx.getImageData(0, 0, toWidth, toHeight);
+                        let useAlpha = true;
+                        if (file.type === "image/jpeg" || (file.type === "image/png" && !this.isImgUsingAlpha(imageData))) {
+                            //image without alpha
+                            useAlpha = false;
+                            ctx = cvs.getContext('2d', { 'alpha': false });
+                            if (fillColor) {
                                 ctx.fillStyle = fillColor;
                                 ctx.fillRect(0, 0, toWidth, toHeight);
                             }
+                            if (filter)
+                                ctx.filter = filter;
+                                
                             ctx.drawImage(img, startX, startY, toWidth, toHeight, 0, 0, toWidth, toHeight);
-                            let imageData = ctx.getImageData(0, 0, toWidth, toHeight);
-                            let useAlpha = true;
-                            if (file.type === "image/jpeg" || (file.type === "image/png" && !this.isImgUsingAlpha(imageData))) {
-                                //image without alpha
-                                useAlpha = false;
-                                ctx = cvs.getContext('2d', { 'alpha': false });
-                                if(fillColor){
-                                    ctx.fillStyle = fillColor;
-                                    ctx.fillRect(0, 0, toWidth, toHeight);
-                                }
-                                ctx.drawImage(img, startX, startY, toWidth, toHeight, 0, 0, toWidth, toHeight);
-                            }
-                            cvs.toBlob((blob)=>{
-                                window.URL.revokeObjectURL(img.src);
-                                let newFile:File = this.generateResultFile(blob, file.name, file.type, new Date().getTime());
-                                // END OF CROPPING
-                                resizedImageSubject.next(newFile);
-                            }, useAlpha ? "image/png" : "image/jpeg");
-                        };
-                        img.src = window.URL.createObjectURL(resizeResult);
-                }, error =>{
+                        }
+                        cvs.toBlob((blob) => {
+                            window.URL.revokeObjectURL(img.src);
+                            let newFile: File = this.generateResultFile(blob, file.name, file.type, new Date().getTime());
+                            // END OF CROPPING
+                            resizedImageSubject.next(newFile);
+                        }, useAlpha ? "image/png" : "image/jpeg");
+                    };
+                    img.src = window.URL.createObjectURL(resizeResult);
+                }, error => {
                     //something went wrong 
                     resizedImageSubject.error(error);
                 });
@@ -100,14 +104,14 @@ export class ImgResizeExactService {
     public resizeExactCrop(file: File, toWidth: number, toHeight: number): Observable<any> {
         let resizedImageSubject: Subject<any> = new Subject<any>();
         if (file.type !== "image/jpeg" && file.type !== "image/png") {
-            setTimeout(()=>{
+            setTimeout(() => {
                 resizedImageSubject.error({ resizedFile: file, reason: "File provided is neither of type jpg nor of type png.", error: "INVALID_EXTENSION" });
-            },0);
+            }, 0);
             return resizedImageSubject.asObservable();
         }
         let img = new Image();
         img.onload = () => {
-            this.ng2ImgMaxService.getEXIFOrientedImage(img).then(orientedImg=>{
+            this.ng2ImgMaxService.getEXIFOrientedImage(img).then(orientedImg => {
                 window.URL.revokeObjectURL(img.src);
                 let imgRatio = orientedImg.width / orientedImg.height;
                 let resizedRatio = toWidth / toHeight;
@@ -131,25 +135,25 @@ export class ImgResizeExactService {
                 }
 
                 this.ng2ImgMaxService.resize([file], resizeWidth, resizeHeight).subscribe((resizeResult) => {
-                        /* one side is already resized exactly to the desired size, now crop the other side */
-                        if (resizeWidth === 100000) {
-                            /* resized to height -> as we crop to the width, we have to set startX */
-                            let newImgWidth = orientedImg.width / (orientedImg.height / toHeight);
-                            startX = (newImgWidth - toWidth) / 2;
-                        }
-                        else if (resizeHeight === 100000) {
-                            /* resized to width -> as we crop to the height, we have to set startY */
-                            let newImgHeight = orientedImg.height / (orientedImg.width / toWidth);
-                            startY = (newImgHeight - toHeight) / 2;
-                        }
-                        this.imgCropService.cropImage(resizeResult, toWidth, toHeight, startX, startY).subscribe((cropResult) => {
-                            //all good, result is a file
-                            resizedImageSubject.next(cropResult);
-                        }, error =>{
-                            //something went wrong 
-                            resizedImageSubject.error(error);
-                        });
-                }, error =>{
+                    /* one side is already resized exactly to the desired size, now crop the other side */
+                    if (resizeWidth === 100000) {
+                        /* resized to height -> as we crop to the width, we have to set startX */
+                        let newImgWidth = orientedImg.width / (orientedImg.height / toHeight);
+                        startX = (newImgWidth - toWidth) / 2;
+                    }
+                    else if (resizeHeight === 100000) {
+                        /* resized to width -> as we crop to the height, we have to set startY */
+                        let newImgHeight = orientedImg.height / (orientedImg.width / toWidth);
+                        startY = (newImgHeight - toHeight) / 2;
+                    }
+                    this.imgCropService.cropImage(resizeResult, toWidth, toHeight, startX, startY).subscribe((cropResult) => {
+                        //all good, result is a file
+                        resizedImageSubject.next(cropResult);
+                    }, error => {
+                        //something went wrong 
+                        resizedImageSubject.error(error);
+                    });
+                }, error => {
                     //something went wrong 
                     resizedImageSubject.error(error);
                 });
@@ -166,16 +170,16 @@ export class ImgResizeExactService {
         }
         return false;
     }
-    private generateResultFile(blob:Blob, name:string, type: string, lastModified: number):File{
-        let resultFile=new Blob([blob], {type: type});
+    private generateResultFile(blob: Blob, name: string, type: string, lastModified: number): File {
+        let resultFile = new Blob([blob], { type: type });
         return this.blobToFile(resultFile, name, lastModified);
     }
-    private blobToFile(blob: Blob, name:string, lastModified: number): File {
+    private blobToFile(blob: Blob, name: string, lastModified: number): File {
         let file: any = blob;
         file.name = name;
         file.lastModified = lastModified;
 
         //Cast to a File() type
-        return <File> file;
+        return <File>file;
     }
 }

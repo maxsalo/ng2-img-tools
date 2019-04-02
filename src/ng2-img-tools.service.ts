@@ -40,10 +40,10 @@ export class Ng2ImgToolsService {
         });
         return resizedFileSubject.asObservable();
     }
-    public resizeExactFill(files: File[], toWidth: number, toHeight: number, fillColor?:string): Observable<any> {
+    public resizeExactFill(files: File[], toWidth: number, toHeight: number, fillColor?:string, filter?:string): Observable<any> {
         let resizedFileSubject: Subject<any> = new Subject<any>();
         files.forEach((file) => {
-            this.resizeExactFillImage(file, toWidth, toHeight, fillColor).subscribe((value) => {
+            this.resizeExactFillImage(file, toWidth, toHeight, fillColor, filter).subscribe((value) => {
                 resizedFileSubject.next(value);
             }, error => {
                 resizedFileSubject.error(error);
@@ -51,8 +51,8 @@ export class Ng2ImgToolsService {
         });
         return resizedFileSubject.asObservable();
     }
-    public resizeExactFillImage(file: File, toWidth: number, toHeight: number, fillColor?:string): Observable<any> {
-        return this.imgResizeExactService.resizeExactFill(file, toWidth, toHeight, fillColor);
+    public resizeExactFillImage(file: File, toWidth: number, toHeight: number, fillColor?:string, filter?:string): Observable<any> {
+        return this.imgResizeExactService.resizeExactFill(file, toWidth, toHeight, fillColor, filter);
     }
     public resizeExactCropImage(file: File, toWidth: number, toHeight: number): Observable<any> {
         return this.imgResizeExactService.resizeExactCrop(file, toWidth, toHeight);
